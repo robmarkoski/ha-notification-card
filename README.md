@@ -397,7 +397,7 @@ localStorage.removeItem("ha-notification-card-YOUR_CARD_ID-muted");
 
 ---
 
-## ⏰ Auto-Expiry
+## Auto-Expiry
 
 Configure how long notifications stay visible before being automatically dismissed:
 
