@@ -1,0 +1,27 @@
+{
+  "name": "ha-notification-card",
+  "version": "1.0.0",
+  "description": "Entity-driven notification center card for Home Assistant",
+  "type": "module",
+  "main": "dist/ha-notification-card.js",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w"
+  },
+  "keywords": [
+    "home-assistant",
+    "lovelace",
+    "custom-card",
+    "hacs",
+    "notifications"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "lit": "^3.2.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "rollup": "^4.28.0"
+  }
+}
