@@ -1,4 +1,4 @@
-# 🔔 Notification Card for Home Assistant
+# Notification Card for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/v/release/robmarkoski/ha-notification-card)](https://github.com/robmarkoski/ha-notification-card/releases)
@@ -10,7 +10,7 @@ Watch your configured entities, trigger notifications on state changes, swipe to
 
 ---
 
-## ✨ Features
+## Features
 
 | Feature | Description |
 |---|---|
@@ -36,7 +36,7 @@ Watch your configured entities, trigger notifications on state changes, swipe to
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### HACS (Recommended)
 
@@ -71,7 +71,7 @@ HACS will automatically register the resource for you.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Using the Visual Editor
 
@@ -101,7 +101,7 @@ That's it. When `binary_sensor.front_door` changes to `on`, a warning notificati
 
 ---
 
-## 📖 Configuration Reference
+## Configuration Reference
 
 ### Card Options
 
@@ -165,7 +165,7 @@ Use these placeholders in the `message` field:
 
 ---
 
-## 🎨 Theming
+## Theming
 
 The card uses standard Home Assistant CSS variables and adapts to any theme automatically:
 
@@ -186,7 +186,7 @@ No custom CSS or card-mod required — it just works with whatever theme you're 
 
 ---
 
-## 📋 Examples
+## Examples
 
 ### Basic Door & Motion Monitoring
 
@@ -355,7 +355,7 @@ entities:
 
 ---
 
-## 🔧 Interactions
+## Interactions
 
 ### On Desktop
 - **Hover** over a notification to reveal the ✕ dismiss button
@@ -379,7 +379,7 @@ When you long-press a notification, you can mute that entity for 1 hour or 24 ho
 
 ---
 
-## 💾 Storage & Persistence
+## Storage & Persistence
 
 Notifications are stored in your browser's `localStorage`, scoped by the `card_id` you configure. This means:
 
@@ -415,7 +415,7 @@ Expiry is checked every 30 seconds. Expired notifications are automatically dism
 
 ---
 
-## 🔀 Sorting
+## Sorting
 
 Control the order notifications appear with the `sort_by` option:
 
@@ -427,7 +427,7 @@ Control the order notifications appear with the `sort_by` option:
 
 ---
 
-## 🔄 Notification Grouping
+## Notification Grouping
 
 When `group_repeated` is `true` (the default), if the same entity triggers again while an undismissed notification already exists:
 
@@ -439,7 +439,7 @@ This prevents the feed from being flooded by rapidly changing entities (e.g., a 
 
 ---
 
-## 🛠️ Development
+## Development
 
 ### Prerequisites
 
@@ -492,7 +492,7 @@ ha-notification-card/
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 ### Notifications aren't appearing
 
@@ -536,13 +536,13 @@ Click **"Clear all"** in the card header, or clear localStorage via the browser 
 
 ---
 
-## 📄 License
+## License
 
 [MIT](LICENSE) © Rob Markoski
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! Please open an issue first to discuss what you'd like to change.
 
