@@ -65,6 +65,48 @@ If you use the visual editor, remove the old card and re-add **"Notification Car
 
 ---
 
+## Screenshots
+
+> Dark theme, running on a live Home Assistant instance.
+
+### Basic Notification
+
+A single door sensor warning — the simplest use case.
+
+![Basic notification](docs/images/01-basic-notification.png)
+
+### Multiple Stacked Notifications
+
+A busy house activity feed with doors and motion sensors. Shows timestamps, badge count, and the "Show more" button.
+
+![Multiple notifications](docs/images/02-multiple-notifications.png)
+
+### All Severity Levels
+
+Critical (pulsing red border), error, warning, success, and info — sorted by severity.
+
+![Severity levels](docs/images/03-severity-levels.png)
+
+### Climate & Threshold Triggers
+
+Numeric `above`/`below` threshold triggers for temperature and humidity sensors.
+
+![Climate thresholds](docs/images/04-climate-thresholds.png)
+
+### Empty State
+
+No active notifications. Customisable empty-state message — or use `hide_when_empty: true` to collapse the card entirely.
+
+![Empty state](docs/images/05-empty-state.png)
+
+### Security Dashboard (Critical Alerts)
+
+Two critical alerts with the pulsing red left border, plus warnings below. `sort_by: severity` keeps high-priority items at the top.
+
+![Security critical](docs/images/06-security-critical.png)
+
+---
+
 ## Installation
 
 ### HACS (Recommended)
