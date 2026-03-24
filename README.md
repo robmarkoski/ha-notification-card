@@ -10,11 +10,40 @@ Watch your configured entities, trigger notifications on state changes, swipe to
 
 ---
 
+## ⚠️ Breaking Change in v2.0.0
+
+The custom element has been **renamed** from `ha-notification-card` to `notification-card`.
+
+**You must update your dashboard YAML:**
+
+```yaml
+# OLD (v1.x) — no longer works
+type: custom:ha-notification-card
+
+# NEW (v2.0+)
+type: custom:notification-card
+```
+
+If you use the visual editor, remove the old card and re-add **"Notification Card"** from the card picker — it will use the new element name automatically.
+
+**No other configuration changes are required.** All entity options, triggers, and card settings remain the same.
+
+---
+
+## What's New in v2.0.0
+
+- **Element renamed** to `notification-card` (see breaking change above)
+- **Initial state check** — on first load, the card now checks all configured entities and immediately creates notifications for any already in a triggered state. Previously, notifications only appeared on state *transitions*; now the card catches up on load.
+- **Improved `getCardSize()`** — removed the `hide_when_empty` guard so the card always reports an accurate size to the Lovelace layout engine.
+
+---
+
 ## Features
 
 | Feature | Description |
 |---|---|
 | **Entity-driven** | Watches configured entities and generates notifications on state changes — no automations or scripts required |
+| **Initial state check** | On first load, checks all configured entities and creates notifications for any already in a triggered state — not just on transitions |
 | **Configurable triggers** | Fire on any change, specific states, on/off transitions, numeric thresholds (above/below), or unavailability |
 | **Swipe to dismiss** | Swipe left or right on mobile/touch to clear notifications |
 | **Tap ✕ to dismiss** | Hover to reveal the dismiss button on desktop, tap to clear |
@@ -86,7 +115,7 @@ HACS will automatically register the resource for you.
 Add a card to any dashboard view:
 
 ```yaml
-type: custom:ha-notification-card
+type: custom:notification-card
 title: "🔔 Notifications"
 visible_count: 4
 expiry_minutes: 1440
@@ -191,7 +220,7 @@ No custom CSS or card-mod required — it just works with whatever theme you're 
 ### Basic Door & Motion Monitoring
 
 ```yaml
-type: custom:ha-notification-card
+type: custom:notification-card
 title: "🏠 House Activity"
 visible_count: 5
 expiry_minutes: 60
@@ -222,7 +251,7 @@ entities:
 ### Climate & Temperature Alerts
 
 ```yaml
-type: custom:ha-notification-card
+type: custom:notification-card
 title: "🌡️ Climate"
 visible_count: 3
 hide_when_empty: true
@@ -258,7 +287,7 @@ entities:
 ### Security Dashboard
 
 ```yaml
-type: custom:ha-notification-card
+type: custom:notification-card
 title: "🛡️ Security"
 card_id: security
 visible_count: 6
@@ -299,7 +328,7 @@ entities:
 ### Device Health Monitoring
 
 ```yaml
-type: custom:ha-notification-card
+type: custom:notification-card
 title: "📡 Device Health"
 card_id: device-health
 visible_count: 4
@@ -336,7 +365,7 @@ entities:
 Use `hide_when_empty: true` to make the card completely disappear when there are no active notifications. The card will reappear with a smooth entry when a notification triggers. This is useful for alert-style cards that should only be visible when something needs attention:
 
 ```yaml
-type: custom:ha-notification-card
+type: custom:notification-card
 title: "⚠️ Alerts"
 hide_when_empty: true
 show_empty: false
@@ -499,7 +528,7 @@ ha-notification-card/
 - Make sure the resource is registered: **Settings → Dashboards → ⋮ → Resources** — you should see `/local/ha-notification-card.js` as a JavaScript Module
 - Hard-refresh your browser (`Ctrl+Shift+R`)
 - Check the browser console for errors (F12 → Console)
-- Notifications only generate on **state changes** — if an entity is already in the trigger state when the card loads, it won't fire until the state changes away and back
+- As of v2.0, the card checks entity states on first load — if an entity is already in a triggered state, a notification will be created immediately
 
 ### The card shows "Custom element doesn't exist"
 
@@ -508,6 +537,7 @@ The resource isn't loaded. Check:
 2. The resource is registered (see above)
 3. You've restarted Home Assistant after adding the resource
 4. You've hard-refreshed the browser
+5. **If upgrading from v1.x:** make sure your YAML uses `type: custom:notification-card` (not the old `custom:ha-notification-card`)
 
 ### Can I use this with entities that change frequently?
 
