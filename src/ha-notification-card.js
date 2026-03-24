@@ -245,7 +245,6 @@ class HaNotificationCard extends LitElement {
 
   getCardSize() {
     const active = this._activeNotifications().length;
-    if (active === 0 && this._config?.hide_when_empty) return 0;
     const count = Math.min(
       active,
       this._config?.visible_count ?? DEFAULT_VISIBLE
@@ -254,7 +253,7 @@ class HaNotificationCard extends LitElement {
   }
 
   static getConfigElement() {
-    return document.createElement("ha-notification-card-editor");
+    return document.createElement("notification-card-editor");
   }
 
   static getStubConfig() {
@@ -352,7 +351,11 @@ class HaNotificationCard extends LitElement {
       newNotifications.push(notification);
     }
 
-    this._initialized = true;
+    if (!this._initialized) {
+      this._initialized = true;
+      this._checkInitialStates();
+      return;
+    }
 
     if (newNotifications.length > 0) {
       let merged = [...this._notifications];
@@ -386,6 +389,106 @@ class HaNotificationCard extends LitElement {
         navigator.vibrate(100);
       }
 
+      this.requestUpdate();
+    }
+  }
+
+  _checkInitialStates() {
+    if (!this.hass || !this._config) return;
+    const newNotifications = [];
+
+    for (const entCfg of this._config.entities) {
+      if (!entCfg.enabled) continue;
+
+      const stateObj = this.hass.states[entCfg.entity];
+      if (!stateObj) continue;
+
+      const currentState = stateObj.state;
+      let triggered = false;
+
+      switch (entCfg.trigger) {
+        case "on":
+          triggered = currentState === "on";
+          break;
+        case "off":
+          triggered = currentState === "off";
+          break;
+        case "state":
+          triggered = currentState === entCfg.state;
+          break;
+        case "above":
+          triggered =
+            entCfg.threshold != null &&
+            !isNaN(Number(currentState)) &&
+            Number(currentState) > entCfg.threshold;
+          break;
+        case "below":
+          triggered =
+            entCfg.threshold != null &&
+            !isNaN(Number(currentState)) &&
+            Number(currentState) < entCfg.threshold;
+          break;
+        case "unavailable":
+          triggered =
+            currentState === "unavailable" || currentState === "unknown";
+          break;
+        default:
+          triggered = false;
+      }
+
+      if (!triggered) continue;
+
+      const friendlyName =
+        entCfg.name ||
+        stateObj.attributes.friendly_name ||
+        entCfg.entity;
+
+      const message = entCfg.message
+        ? interpolate(entCfg.message, {
+            name: friendlyName,
+            state: currentState,
+            previous: "unknown",
+            entity: entCfg.entity,
+          })
+        : `${friendlyName}: ${currentState}`;
+
+      const notification = {
+        id: uid(),
+        entity: entCfg.entity,
+        severity: entCfg.severity,
+        message,
+        state: currentState,
+        previous: "unknown",
+        timestamp: Date.now(),
+        icon: entCfg.icon || stateObj.attributes.icon || null,
+        expiry_minutes:
+          entCfg.expiry_minutes ?? this._config.expiry_minutes,
+        count: 1,
+      };
+
+      // Skip if already grouped
+      if (this._config.group_repeated) {
+        const existing = this._notifications.find(
+          (m) =>
+            m.entity === notification.entity &&
+            m.severity === notification.severity &&
+            !this._dismissed[m.id]
+        );
+        if (existing) continue;
+      }
+
+      // Skip if entity already has an active notification
+      const activeForEntity = this._notifications.find(
+        (n) => n.entity === notification.entity && !this._dismissed[n.id]
+      );
+      if (activeForEntity) continue;
+
+      newNotifications.push(notification);
+    }
+
+    if (newNotifications.length > 0) {
+      this._notifications = [...this._notifications, ...newNotifications];
+      this._store.save(this._notifications);
       this.requestUpdate();
     }
   }
@@ -1518,12 +1621,12 @@ class HaNotificationCardEditor extends LitElement {
 /*  Registration                                                       */
 /* ------------------------------------------------------------------ */
 
-customElements.define("ha-notification-card", HaNotificationCard);
-customElements.define("ha-notification-card-editor", HaNotificationCardEditor);
+customElements.define("notification-card", HaNotificationCard);
+customElements.define("notification-card-editor", HaNotificationCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "ha-notification-card",
+  type: "notification-card",
   name: "Notification Card",
   description:
     "Entity-driven notification center with swipe dismiss, severity levels, auto-expiry, and grouped alerts.",
