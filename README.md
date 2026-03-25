@@ -10,6 +10,13 @@ Watch your configured entities, trigger notifications on state changes, swipe to
 
 ---
 
+## What's New in v2.1.0
+
+- **`for:` trigger modifier** — require an entity to remain in the triggered state for a specified duration before a notification is created. If the state reverts before the timer expires, no notification fires. Works with all trigger types except `any`. Supports `HH:MM:SS`, shorthand (`30s`, `10m`, `2h`, `1d`, `1w`), or plain seconds.
+- **Initial load awareness** — when a `for:` duration is configured, the card uses HA's `last_changed` attribute on first load. If the entity has already been in the triggered state long enough, the notification appears immediately. If not, a timer is started for the remaining duration.
+
+---
+
 ## ⚠️ Breaking Change in v2.0.0
 
 The custom element has been **renamed** from `ha-notification-card` to `notification-card`.
@@ -45,6 +52,7 @@ If you use the visual editor, remove the old card and re-add **"Notification Car
 | **Entity-driven** | Watches configured entities and generates notifications on state changes — no automations or scripts required |
 | **Initial state check** | On first load, checks all configured entities and creates notifications for any already in a triggered state — not just on transitions |
 | **Configurable triggers** | Fire on any change, specific states, on/off transitions, numeric thresholds (above/below), or unavailability |
+| **`for:` duration modifier** | Require an entity to stay in the triggered state for a specified duration before notifying — e.g., garage open for 10 minutes |
 | **Swipe to dismiss** | Swipe left or right on mobile/touch to clear notifications |
 | **Tap ✕ to dismiss** | Hover to reveal the dismiss button on desktop, tap to clear |
 | **Long-press for details** | Hold a notification to expand full entity details — current state, attributes, timestamps |
@@ -204,6 +212,7 @@ Each entry in the `entities` list configures a watcher for one entity:
 | `trigger` | string | `any` | When to fire — see [Trigger Types](#trigger-types) below |
 | `state` | string | — | Target state value. Only used with `trigger: state` |
 | `threshold` | number | — | Numeric threshold. Only used with `trigger: above` or `trigger: below` |
+| `for` | string/number | — | Duration the entity must remain in the triggered state before a notification is created. Accepts `HH:MM:SS`, `MM:SS`, shorthand (`30s`, `10m`, `2h`, `1d`, `1w`), or a plain number (seconds). Omit or `0` for instant triggering. Not used with `trigger: any` |
 | `severity` | string | `info` | Notification severity: `info`, `success`, `warning`, `error`, or `critical` |
 | `message` | string | `{name}: {state}` | Message template. See [Message Variables](#message-variables) |
 | `icon` | string | *(auto)* | Override the notification icon (e.g., `mdi:fire`). Defaults to the entity's icon or a severity-appropriate icon |
@@ -222,6 +231,57 @@ Each entry in the `entities` list configures a watcher for one entity:
 | `above` | A numeric entity state crosses **above** the configured `threshold` (only fires on the crossing, not while it stays above) |
 | `below` | A numeric entity state crosses **below** the configured `threshold` |
 | `unavailable` | The entity state becomes `unavailable` or `unknown` — useful for monitoring device connectivity |
+
+### `for:` Duration Modifier
+
+The `for:` option delays notification creation until an entity has been in the triggered state for the specified duration. This is inspired by Home Assistant's automation `for:` condition — ideal for things like "garage open for 10 minutes" or "temperature above 30°C for 5 minutes".
+
+**How it works:**
+
+1. Trigger condition is met → a timer starts
+2. If the entity state reverts before the timer expires → timer is cancelled, no notification
+3. If the timer expires and the entity is still in the triggered state → notification is created
+4. On page load, the card checks HA's `last_changed` timestamp. If the entity has been in the triggered state long enough, the notification appears immediately. If not, a timer starts for the remaining duration.
+
+**Accepted formats:**
+
+| Format | Example | Duration |
+|---|---|---|
+| `HH:MM:SS` | `"00:10:00"` | 10 minutes |
+| `MM:SS` | `"5:00"` | 5 minutes |
+| Shorthand | `"30s"` | 30 seconds |
+| Shorthand | `"10m"` | 10 minutes |
+| Shorthand | `"2h"` | 2 hours |
+| Shorthand | `"1d"` | 1 day |
+| Shorthand | `"1w"` | 1 week |
+| Plain number | `600` | 600 seconds (10 minutes) |
+
+**Example — garage open for 10 minutes:**
+
+```yaml
+type: custom:notification-card
+title: "🏠 House"
+entities:
+  - entity: cover.garage
+    trigger: state
+    state: "open"
+    for: "10m"
+    severity: warning
+    message: "⚠️ Garage has been open for 10+ minutes"
+```
+
+**Example — temperature sustained above threshold:**
+
+```yaml
+  - entity: sensor.outdoor_temperature
+    trigger: above
+    threshold: 38
+    for: "5m"
+    severity: warning
+    message: "🌡️ Outside temp has been above 38°C for 5+ minutes"
+```
+
+**Note:** `for:` is not supported with `trigger: any` since "any change" fires on every state transition — there's no single state to wait in.
 
 ### Message Variables
 
@@ -365,6 +425,43 @@ entities:
     state: unlocked
     severity: warning
     message: "🔓 {name} unlocked"
+```
+
+### Delayed Alerts with `for:` Duration
+
+Only alert when something has been in a concerning state for a while — avoids false alarms from brief state changes:
+
+```yaml
+type: custom:notification-card
+title: "⏱️ Sustained Alerts"
+hide_when_empty: true
+entities:
+  - entity: cover.garage
+    trigger: state
+    state: "open"
+    for: "10m"
+    severity: warning
+    message: "⚠️ Garage has been open for 10+ minutes"
+
+  - entity: binary_sensor.front_door
+    trigger: "on"
+    for: "2m"
+    severity: warning
+    message: "🚪 Front door open for 2+ minutes"
+
+  - entity: sensor.server_cpu_temperature
+    trigger: above
+    threshold: 80
+    for: "5m"
+    severity: error
+    message: "🔥 Server CPU above 80°C for 5+ minutes"
+
+  - entity: sensor.indoor_humidity
+    trigger: above
+    threshold: 70
+    for: "30m"
+    severity: info
+    message: "💧 Humidity above 70% for 30+ minutes — check ventilation"
 ```
 
 ### Device Health Monitoring

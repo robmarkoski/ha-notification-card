@@ -15,6 +15,7 @@
  *  - Notification grouping/stacking for repeated entity triggers
  *  - Mute/snooze per entity
  *  - Sound/vibration option on new notifications
+ *  - "for:" duration modifier — entity must stay in triggered state for X time
  */
 
 import { LitElement, html, css, nothing } from "lit";
@@ -23,7 +24,7 @@ import { LitElement, html, css, nothing } from "lit";
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "2.1.0";
 const STORAGE_KEY = "ha-notification-card";
 const DEFAULT_VISIBLE = 4;
 const DEFAULT_EXPIRY_MINUTES = 0; // 0 = no auto-expiry
@@ -92,6 +93,62 @@ function severityIcon(severity) {
     default:
       return "mdi:information";
   }
+}
+
+/**
+ * Parse a "for" duration string into milliseconds.
+ * Accepts:
+ *   - HH:MM:SS or MM:SS  (e.g. "00:10:00", "5:00")
+ *   - Shorthand: "30s", "10m", "2h", "1d", "1w"
+ *   - Plain number = seconds
+ * Returns 0 if falsy/unparseable (meaning disabled).
+ */
+function parseDuration(val) {
+  if (val == null || val === "" || val === false) return 0;
+  if (typeof val === "number") return val > 0 ? val * 1000 : 0;
+
+  const str = String(val).trim().toLowerCase();
+  if (!str) return 0;
+
+  // HH:MM:SS or MM:SS
+  const colons = str.match(/^(\d+):(\d+)(?::(\d+))?$/);
+  if (colons) {
+    if (colons[3] !== undefined) {
+      // HH:MM:SS
+      return (
+        (Number(colons[1]) * 3600 +
+          Number(colons[2]) * 60 +
+          Number(colons[3])) *
+        1000
+      );
+    }
+    // MM:SS
+    return (Number(colons[1]) * 60 + Number(colons[2])) * 1000;
+  }
+
+  // Shorthand: number + unit
+  const shorthand = str.match(/^(\d+(?:\.\d+)?)\s*(s|m|h|d|w)$/);
+  if (shorthand) {
+    const n = parseFloat(shorthand[1]);
+    switch (shorthand[2]) {
+      case "s":
+        return n * 1000;
+      case "m":
+        return n * 60 * 1000;
+      case "h":
+        return n * 3600 * 1000;
+      case "d":
+        return n * 86400 * 1000;
+      case "w":
+        return n * 604800 * 1000;
+    }
+  }
+
+  // Plain number = seconds
+  const plain = parseFloat(str);
+  if (!isNaN(plain) && plain > 0) return plain * 1000;
+
+  return 0;
 }
 
 function severityCSSVar(severity) {
@@ -200,6 +257,7 @@ class HaNotificationCard extends LitElement {
     this._expiryTimer = null;
     this._longPressTimer = null;
     this._initialized = false;
+    this._pendingForTimers = {}; // entity -> { timerId, entCfg, state }
   }
 
   /* ----- Config ----- */
@@ -234,6 +292,8 @@ class HaNotificationCard extends LitElement {
         message: e.message || null,
         icon: e.icon || null,
         expiry_minutes: e.expiry_minutes ?? null,
+        for: e.for || null,
+        _forMs: parseDuration(e.for),
         enabled: e.enabled ?? true,
       })),
     };
@@ -282,6 +342,14 @@ class HaNotificationCard extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._stopExpiryTimer();
+    this._clearAllForTimers();
+  }
+
+  _clearAllForTimers() {
+    for (const key of Object.keys(this._pendingForTimers)) {
+      clearTimeout(this._pendingForTimers[key].timerId);
+    }
+    this._pendingForTimers = {};
   }
 
   updated(changedProps) {
@@ -318,7 +386,37 @@ class HaNotificationCard extends LitElement {
       if (prevState === currentState) continue;
 
       const triggered = this._checkTrigger(entCfg, currentState, prevState);
-      if (!triggered) continue;
+
+      // --- "for:" duration handling ---
+      const forMs = entCfg._forMs || 0;
+      const timerKey = entCfg.entity + "|" + (entCfg.trigger || "any");
+
+      if (!triggered) {
+        // State left the triggered condition — cancel any pending timer
+        if (this._pendingForTimers[timerKey]) {
+          clearTimeout(this._pendingForTimers[timerKey].timerId);
+          delete this._pendingForTimers[timerKey];
+        }
+        continue;
+      }
+
+      // Triggered — but if we have a "for" duration, defer the notification
+      if (forMs > 0) {
+        // Already pending? Reset the timer (state flickered)
+        if (this._pendingForTimers[timerKey]) {
+          clearTimeout(this._pendingForTimers[timerKey].timerId);
+        }
+        this._pendingForTimers[timerKey] = {
+          timerId: setTimeout(() => {
+            this._fireForNotification(entCfg, timerKey);
+          }, forMs),
+          entCfg,
+          state: currentState,
+          prevState,
+          startedAt: Date.now(),
+        };
+        continue;
+      }
 
       const friendlyName =
         entCfg.name ||
@@ -404,39 +502,37 @@ class HaNotificationCard extends LitElement {
       if (!stateObj) continue;
 
       const currentState = stateObj.state;
-      let triggered = false;
-
-      switch (entCfg.trigger) {
-        case "on":
-          triggered = currentState === "on";
-          break;
-        case "off":
-          triggered = currentState === "off";
-          break;
-        case "state":
-          triggered = currentState === entCfg.state;
-          break;
-        case "above":
-          triggered =
-            entCfg.threshold != null &&
-            !isNaN(Number(currentState)) &&
-            Number(currentState) > entCfg.threshold;
-          break;
-        case "below":
-          triggered =
-            entCfg.threshold != null &&
-            !isNaN(Number(currentState)) &&
-            Number(currentState) < entCfg.threshold;
-          break;
-        case "unavailable":
-          triggered =
-            currentState === "unavailable" || currentState === "unknown";
-          break;
-        default:
-          triggered = false;
-      }
+      const triggered = this._isInTriggeredState(entCfg, currentState);
 
       if (!triggered) continue;
+
+      // "for:" duration check on initial load — use HA's last_changed
+      const forMs = entCfg._forMs || 0;
+      if (forMs > 0) {
+        const lastChanged = stateObj.last_changed
+          ? new Date(stateObj.last_changed).getTime()
+          : 0;
+        const elapsed = Date.now() - lastChanged;
+
+        if (elapsed < forMs) {
+          // Not long enough yet — start a timer for the remainder
+          const timerKey = entCfg.entity + "|" + (entCfg.trigger || "any");
+          const remaining = forMs - elapsed;
+          if (!this._pendingForTimers[timerKey]) {
+            this._pendingForTimers[timerKey] = {
+              timerId: setTimeout(() => {
+                this._fireForNotification(entCfg, timerKey);
+              }, remaining),
+              entCfg,
+              state: currentState,
+              prevState: "unknown",
+              startedAt: Date.now(),
+            };
+          }
+          continue;
+        }
+        // Else: already been in state long enough — fall through to create notification
+      }
 
       const friendlyName =
         entCfg.name ||
@@ -490,6 +586,124 @@ class HaNotificationCard extends LitElement {
       this._notifications = [...this._notifications, ...newNotifications];
       this._store.save(this._notifications);
       this.requestUpdate();
+    }
+  }
+
+  /**
+   * Called when a "for:" timer expires. Verifies entity is still in the
+   * triggered state before creating the notification.
+   */
+  _fireForNotification(entCfg, timerKey) {
+    delete this._pendingForTimers[timerKey];
+    if (!this.hass || !this._config) return;
+
+    const stateObj = this.hass.states[entCfg.entity];
+    if (!stateObj) return;
+
+    const currentState = stateObj.state;
+
+    // Verify still in triggered state
+    if (!this._isInTriggeredState(entCfg, currentState)) return;
+
+    // Check mute
+    if (this._muted[entCfg.entity]) {
+      const muteUntil = this._muted[entCfg.entity];
+      if (muteUntil > Date.now()) return;
+    }
+
+    const friendlyName =
+      entCfg.name ||
+      stateObj.attributes.friendly_name ||
+      entCfg.entity;
+
+    const message = entCfg.message
+      ? interpolate(entCfg.message, {
+          name: friendlyName,
+          state: currentState,
+          previous: "unknown",
+          entity: entCfg.entity,
+        })
+      : `${friendlyName}: ${currentState}`;
+
+    const notification = {
+      id: uid(),
+      entity: entCfg.entity,
+      severity: entCfg.severity,
+      message,
+      state: currentState,
+      previous: "unknown",
+      timestamp: Date.now(),
+      icon: entCfg.icon || stateObj.attributes.icon || null,
+      expiry_minutes: entCfg.expiry_minutes ?? this._config.expiry_minutes,
+      count: 1,
+    };
+
+    let merged = [...this._notifications];
+
+    if (this._config.group_repeated) {
+      const existing = merged.find(
+        (m) =>
+          m.entity === notification.entity &&
+          m.severity === notification.severity &&
+          !this._dismissed[m.id]
+      );
+      if (existing) {
+        existing.message = notification.message;
+        existing.state = notification.state;
+        existing.timestamp = notification.timestamp;
+        existing.count = (existing.count || 1) + 1;
+        this._notifications = merged;
+        this._store.save(this._notifications);
+        this.requestUpdate();
+        return;
+      }
+    }
+
+    merged.push(notification);
+    if (merged.length > this._config.max_stored) {
+      merged = merged.slice(-this._config.max_stored);
+    }
+    this._notifications = merged;
+    this._store.save(this._notifications);
+
+    if (this._config.vibrate && navigator.vibrate) {
+      navigator.vibrate(100);
+    }
+
+    this.requestUpdate();
+  }
+
+  /**
+   * Check if a current state matches the trigger condition (without
+   * requiring a previous state). Used for "for:" timer verification
+   * and initial state checks.
+   */
+  _isInTriggeredState(cfg, current) {
+    switch (cfg.trigger) {
+      case "any":
+        return true;
+      case "state":
+        return current === cfg.state;
+      case "on":
+        return current === "on";
+      case "off":
+        return current === "off";
+      case "unavailable":
+        return current === "unavailable" || current === "unknown";
+      case "above":
+        return (
+          cfg.threshold != null &&
+          !isNaN(Number(current)) &&
+          Number(current) > cfg.threshold
+        );
+      case "below":
+        return (
+          cfg.threshold != null &&
+          !isNaN(Number(current)) &&
+          Number(current) < cfg.threshold
+        );
+      default:
+        return false;
     }
   }
 
@@ -1444,6 +1658,31 @@ class HaNotificationCardEditor extends LitElement {
                   placeholder="{name} changed to {state}"
                 />
               </div>
+
+              ${ent.trigger !== "any"
+                ? html`
+                    <div class="field">
+                      <label
+                        >For duration
+                        <small
+                          >(e.g. "10m", "1h", "00:10:00" — blank =
+                          instant)</small
+                        ></label
+                      >
+                      <input
+                        type="text"
+                        .value=${ent.for || ""}
+                        @input=${(e) =>
+                          this._updateEntity(
+                            i,
+                            "for",
+                            e.target.value || null
+                          )}
+                        placeholder="10m"
+                      />
+                    </div>
+                  `
+                : nothing}
 
               <div class="row">
                 <div class="field half">
